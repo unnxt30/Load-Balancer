@@ -7,7 +7,7 @@ import (
 
 
 func ServerRespond(w http.ResponseWriter, r *http.Request){
-	msg := "server says hi"
+	msg := "server_1 says hi"
 	fmt.Println(msg)
 	w.Write([]byte(msg))
 }

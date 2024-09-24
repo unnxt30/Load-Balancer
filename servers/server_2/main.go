@@ -11,13 +11,13 @@ import (
 
 
 func main(){
-	err := godotenv.Load("../.env")
+	err := godotenv.Load("../../.env")
 
 	if err != nil{
 		log.Fatal(".env error")
 	}
 
-	SERVER_PORT := os.Getenv("SERVER_PORT")
+	SERVER_PORT := os.Getenv("SERVER_PORT_2")
 
 	mux := http.NewServeMux()
 	var server http.Server
