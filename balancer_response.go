@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -50,24 +49,28 @@ A list of active servers. Dynamic/Updated after each health check
 */
 
 
-func (b *BalancerConfig) healthCheck(done chan bool) error{
-	var deadServers int
-	for _, v := range b.serverStack{
-		resp, err := http.Get(v.serverURL)
-		if err != nil{
-			return err
-		}
-		if resp.StatusCode != 200 {
-			code := fmt.Sprintf("%v", resp.StatusCode)
-			v.isHealthy = false
-			deadServers += 1
-			return errors.New(code) 
-		}
-	}
+func (b *BalancerConfig) healthCheck(quit chan bool) error {
+    deadServers := 0
+    for i := range b.serverStack {
+        resp, err := http.Get(b.serverStack[i].serverURL)
+        if err != nil {
+            b.serverStack[i].isHealthy = false
+            deadServers++
+            continue
+        }
+        if resp.StatusCode != 200 {
+            b.serverStack[i].isHealthy = false
+            deadServers++
+        } else {
+            b.serverStack[i].isHealthy = true
+        }
+    }
 
 	if deadServers == len(b.serverStack){
-		done <- true
+		quit <- false
+		return errors.New("all servers dead nigga")
 	}
+
 	return nil
 }
 
@@ -78,61 +81,62 @@ func (b *BalancerConfig) BalancerResponse(w http.ResponseWriter, r *http.Request
 		log.Fatal("Couldn't load environment variables")
 	}
 
-	// Load-Balancer Response
-	userIP := ReadUserIP(r)
-	msg := fmt.Sprintf("Recieved request from: %v", userIP)
-	go helper.RespondWithJSON(w, 200, map[string]string{"message": msg})
-
 	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	done := make(chan bool)
-	
-	for {
-		select {
-		case <-done:
-			fmt.Println("All servers down!")
-			return
-		case <-ticker.C:
-			go b.healthCheck(done)
+	quit := make(chan bool)
+	go func() {
+		for {
+		   select {
+			case <- ticker.C:
+				b.healthCheck(quit)
+			case <- quit:
+				ticker.Stop()
+				return
+			}
 		}
-
-		i := 0
-		for !b.serverStack[i].isHealthy {
-			b.serverStack = append(b.serverStack, b.currentServer)	
-			b.serverStack = b.serverStack[i:]
-			i++
-		}
-	
-		b.currentServer = b.serverStack[0]
-
-		b.serverStack = append(b.serverStack, b.currentServer)	
-		b.serverStack = b.serverStack[1:]
+	 }()	
 
 
-		// Round Robin Logic
-		client := &http.Client{}
-		forwardRequest, err := createForwardRequest(b.currentServer.serverURL, r)
+	i := 0
+    for i < len(b.serverStack) {
+        if !b.serverStack[i].isHealthy {
+            b.serverStack = append(b.serverStack, b.serverStack[i])
+            b.serverStack = append(b.serverStack[:i], b.serverStack[i+1:]...)
+        } else {
+            b.currentServer = b.serverStack[i]
+            i++
+            break
+        }
+    }
 
-		if err != nil{
-			helper.RespondWithError(w, 400, "Could not forward the request")
-			return
-		}
-
-		forwardRequest.Header = r.Header
-
-		resp , err := client.Do(forwardRequest)
-		if err != nil{
-			helper.RespondWithError(w, 400, "Could not forward the request")
-			return
-		}
-
-		resp_msg, _ := io.ReadAll(resp.Body)
-
-		body := string(resp_msg)
-
-		helper.RespondWithJSON(w, 200, map[string]string{"server":body})
+    b.serverStack = append(b.serverStack, b.currentServer)   
+    b.serverStack = b.serverStack[1:]		
 
 
+	client := &http.Client{}
+	forwardRequest, err := createForwardRequest(b.currentServer.serverURL, r)
+
+	if err != nil{
+		helper.RespondWithError(w, 400, "Could not forward the request")
+		return
 	}
+
+	forwardRequest.Header = r.Header
+
+	resp , err := client.Do(forwardRequest)
+	if err != nil{
+		helper.RespondWithError(w, 404, err.Error())
+		return
+	}
+
+	resp_msg, _ := io.ReadAll(resp.Body)
+
+	body := string(resp_msg)
+
+	if resp.StatusCode != 200{
+		helper.RespondWithError(w, 400, "server not live.")
+	}
+
+	helper.RespondWithJSON(w, 200, map[string]string{"server":body, "code":resp.Status})
+
 }
 

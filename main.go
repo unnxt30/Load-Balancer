@@ -19,9 +19,12 @@ func main() {
 	BALANCER_PORT := os.Getenv("BALANCER_PORT");
 	port_1 := os.Getenv("SERVER_PORT_1")
 	port_2 := os.Getenv("SERVER_PORT_2")
+	port_3 := os.Getenv("SERVER_PORT_3")
 	
 	server_route_1 := fmt.Sprintf("http://localhost:%v/", port_1)
 	server_route_2 := fmt.Sprintf("http://localhost:%v/", port_2)
+	server_route_3 := fmt.Sprintf("http://localhost:%v/", port_3)
+
 	
 	// serverList := map[string]bool{
 	// 	server_route_1 : true,
@@ -40,8 +43,14 @@ func main() {
 		isHealthy: true,
 	}
 
+	server3 := Server{
+		serverURL: server_route_3,
+		isHealthy: true,
+	}
+
 	serverList = append(serverList, server1)
 	serverList = append(serverList, server2)
+	serverList = append(serverList, server3)
 
 
 	balConfig := BalancerConfig{

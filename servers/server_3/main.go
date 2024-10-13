@@ -17,7 +17,7 @@ func main(){
 		log.Fatal(".env error")
 	}
 
-	SERVER_PORT := os.Getenv("SERVER_PORT_2")
+	SERVER_PORT := os.Getenv("SERVER_PORT_3")
 
 	mux := http.NewServeMux()
 	var server http.Server
